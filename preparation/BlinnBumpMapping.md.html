@@ -1,0 +1,159 @@
+<meta charset="utf-8">
+
+Simulation of Wrinkled Surfaces
+James F. Blinn
+
+# Abstract
+- Surfaces at the time were extremely smooth
+- Textures existed to attenuate reflection
+  - but did not realistic for rough objects
+- This paper perturbs the surface normal before lighting claculation
+
+# Introduction
+
+## Normals
+- Surface Normal is important in calculation local intensity
+- The partial derivates of point $P$ wrt vectors $u$ and $v$ are $Pu$ and $Pv$
+- the normal is defined as
+
+    $$ \overrightarrow{N} = \overrightarrow{P_u} \times \overrightarrow{P_v} $$
+
+- the Normal must be scaled to a length of 1.0 by dividng by it's length
+
+    $$ \frac{\overrightarrow{N}}{|N|} $$
+
+## Texture Mapping
+- Images of surfaces made from patches do not have arifacts like polygonal meshes
+  - They can look too smooth
+- Catmull's texturing mapping produces a 4th bivariate function $C(u,v)$
+  - Where the other 3 are
+  - $X = X(u,v)$
+  - $Y = Y(u,v)$
+  - $Z = Z(u,v)$
+- This can be used to determine local intensity and vary over space
+- Attempts to use texture mapping to simulate bumps and wrinkles had previously been unsuccesful
+  - They looked like smooth objects with rough decals
+
+
+# Normal Vector Perturbation
+- Modelling each wrinkle a separate patch is prohibitively expensive
+- This can modeled much more cheaply with surface normal perturbation
+
+
+## Derivation
+- On a wrinkled patch, the surface is displaced in the direction of the surface normal by an amount defined by $F(u,v)$
+
+    $$ P' = P + F \frac{\overrightarrow{N}}{|N|} $$
+
+- The new normal is solved similarly, only taking $P'$ into account
+
+    $$ \overrightarrow{N'} = \overrightarrow{P'_{u}} \times \overrightarrow{P'_{v}} $$
+
+- The partial derivates are solved with the chain rule
+
+    $$ P'_u = \frac{d}{du} P' = \frac{d}{du}(P + F \frac{\overrightarrow{N}}{|N|}) $$
+    $$ = P_u + F_u \frac{\overrightarrow{N}}{|N|} + F (\frac{\overrightarrow{N}}{|N|})_u $$
+
+    $$ P'_v = \frac{d}{dv} P' = \frac{d}{dv}(P + F \frac{\overrightarrow{N}}{|N|}) $$
+    $$ = P_v + F_v \frac{\overrightarrow{N}}{|N|} + F (\frac{\overrightarrow{N}}{|N|})_v $$
+
+- The above is too complicated
+  - We assume that F is small
+  - For most renders F is between 0.01 and 0.1 so this isn't a terrible assumption
+
+    $$ P'_u = P_u + F_u \frac{\overrightarrow{N}}{|N|} $$
+    $$ P'_v = P_v + F_v \frac{\overrightarrow{N}}{|N|} $$
+
+This all comes out to a calculation for the new normal:
+
+    $$ N' = (P_u + F_u \frac{\overrightarrow{N}}{|N|}) 
+       \times (P_v + F_v \frac{\overrightarrow{N}}{|N|}) 
+    $$
+    $$ = (P_u \times P_v) + F_u \frac{\overrightarrow{N} \times P_v}{|N|}
+         + F_v \frac{P_v \times \overrightarrow{N} }{|N|} 
+         + F_u F_v \frac{\overrightarrow{N} \times \overrightarrow{N}}{|N|}
+    $$
+
+## Simplification
+- With some Simplifications
+  - $ N := P_u \times P_v $
+  - $ X \times X = 0 $
+
+    $$ \overrightarrow{N'} = \overrightarrow{N} + \overrightarrow{D} $$
+    $$ \overrightarrow{D} = \frac{F_u (\overrightarrow{N} \times P_v)
+                          - F_v (\overrightarrow{N} \times P_u)}{|N|}
+    $$
+
+## Interpretation
+- D lies on the tangent plane of the surface, with orthonormal bases
+  - $ \overrightarrow{N} \times P_u $
+  - $ \overrightarrow{N} \times P_v $
+- The new $N'$ is just the existing normal and the addition of it's orthogonal space
+
+- $N'$ can be passed on to the remaining intensity calculations after normalization
+
+# Texture Function Definition
+- How to calculate the texturing function $F$
+
+## Possible Solutions
+- Mentions checkerboard sampling
+- Then bilinear interpolation
+  - Bilinear interpolation is discontinuous in derivative
+  - $F$ only appears in the normal calculation as it's derivative
+  - So bilinear is a poor fit
+- Thereby need a higher order filter to maintain continuouity in derivative (differentiability)
+- Possible solution is B-Splines which are naturally 3rd order
+  - Too General
+
+## Implemented Solution
+- Simplest solution is "differencing" (finding the derivative?) the bilerped function along the parametric directions ($u$ and $v$)
+- For a texture of 64x64 
+
+    $$ E = 1/64 $$
+    $$ F_u = \frac{F(u+E, v) - F(u-E, v)}{2E} $$
+    $$ F_v = \frac{F(u, v+E) - F(u, v-E)}{2E} $$
+
+## Dealing with out-of-bounds
+- Need to protect against indexing less than 0 or greater than 1
+
+- Make the function periodic.
+  - for 64x64 bits, $u = u \& 0x3F$ and $v = v \& 0x3F$
+
+## Generating Bumps
+- Algorithmically
+- Letters using bitmap character
+- Take z-buffers or depth-buffers from other renders
+- Use a painting program
+
+# Dependance on Scale
+- Perturbation amount is not invariant with the scale of the object
+
+## Variant Scaling
+- If the $X$, $Y$, $Z$ surface definitions functions are scaled up by 2x
+  - The normal vector length $|N|$ is 4x larger
+  - The perturbation amount $|D|$ is only 2x larger
+- This is because the object ($X$,$Y$,$Z$) is being scaled, but $F$ is _not_
+
+## Invariant Scaling
+
+    $$ D' = a D \frac{|N|}{|D|} $$
+    $$ |D'| = a |N| $$
+    $$ tan(\theta ') = \frac{|D'|}{|N|} = a $$
+
+
+# Aliasing
+
+
+
+
+<!-- Style -->
+
+<style> /* Custom Style */
+        .md div.imagecaption { text-align: center; margin-bottom: 1em; }
+</style>
+
+<!-- Markdeep: -->
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="../assets/markdeep.min.js"></script>
+<script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

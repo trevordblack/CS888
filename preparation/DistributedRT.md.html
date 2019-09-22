@@ -1,0 +1,192 @@
+<meta charset="utf-8">
+
+Distributed Ray Tracing
+Robert L. Cook, Thomas Porter, Loren Carpenter
+
+# Abstract
+- Ray Tracing makes many graphics techniques simple
+  - shadows
+  - reflections
+  - refracted light
+- Ray directions had previously been solved precisely
+  - i.e. perfect reflections
+- Solving for the ray direction by analytic function can yield new phenomena
+  - Motion Blur
+  - Depth of Field
+  - Penumbras
+  - Translucency
+  - "fuzzy" reflections
+- Previous motion blur and depth of field approaches were not an integrated solution
+  - so there was inaccurate visibility
+
+# Introduction
+- If RT is done with proper anti-aliasing, the rays can sample
+  - motion
+  - the camera lens
+  - the shading function
+- Oversampling in space
+- Sampling a specular distribution function produces gloss
+- Sampling a transmission dist function produces translucency
+- Sampling the solid angle of the light sources produces penumbra
+  - Where a _solid angle_ is an $\omega$ of $\theta$ and $\phi$ terms
+- Sampling the camera lens area produces depth of field
+- Sampling in time produces motion blur
+
+# Shading
+
+The intensity $I$ of the reflected light at a point on a surface is
+
+    $$I(\phi_r, \theta_r) = \int_{\phi_i} \int_{\theta_i}
+        L(\phi_i, \theta_i) R(\phi_i, \theta_i, \phi_r, \theta_r)
+        d \phi_i d \theta_i 
+    $$
+Where
+
+- $(\theta_i,\phi_r)$ is the angle of incidence
+- $(\theta_r,\phi_r)$ is the angle of reflection
+
+The integration is simplified by some assumptions
+- Assume that $L$ is a $\delta$ function ($L$ is zero except for lightpaths)
+  - All light sources are treated as points
+  - **No indirect lighting**
+- Paths that are not in the direction of light sources have a single ambient term
+  - The ambient light source is the same in all directions, s.t. $L$ is independent of $\phi_i$ and $\theta_i$
+    - $L$ may be removed from the integral
+- Assume that $R$ is a $\delta$ function ($R$ is a perfect mirror)
+  - An associated assumption an be made for $T$
+
+- Any shading function of value is going to be too complicated to solve for analytically
+- We can still point sample it's value to create a Monte Carlo
+  - This is done by distributing the rays
+- The assumptions on $L$ and $R$ can be relaxed to model more complicated shading
+
+## Gloss
+- Reflections in real life are often blurred or hazy
+- _Gloss_ represents how distinctly a surface reflects it's environment
+- where _Gloss_ is typically [0,1]
+  - _Roughness_ is usually represented as $1 - Gloss$
+- Mirror reflections are rays traced in the _mirror_ direction
+
+    $$ R_r = R_i - 2(N \cdot R_i)N $$
+
+- Gloss can be created by distributing the rays around this direction
+
+## Translucency
+- Transmission is similar to reflection except 
+  - $R$ is replaced by a $T$
+  - The integral is performed over the hemisphere under the surface
+- Transmitted light can have ambient, diffuse, and specular components
+  - Unsurprising, but _are you fucking kidding me_
+- Translucency is the gloss analog of transmission
+  - i.e.  it is the specular component
+
+## Penumbras
+- Show up when a light source is partially obscured
+- The reflected intensity is proportional to the solid angle of the visible portion of the light
+- Determining the amount of solid angle visible is extremely complex to determine analytically
+
+- Shadows are found by tracing rays from a surface toward the light sources
+- Penumbras are found by distributing these rays
+  - They can be traced to any point on the light source
+- Light sources are no longer simplified as point sources
+
+- The distribution of shadow rays must (says _must_ is actually _should_) be weighted according to 
+  - the projected area of the light source (from the surface point)
+  - the brightness of different parts of the light source (from the surface point)
+- The number of rays traced toward a portion of the light _must_ be
+  - proportional to the amount of the light's energy from that portion, if
+  - the light was completely unobscured to the surface point
+
+- The amount of light visible to any surface point is _then_ equal to the proportion of all light's intensity visible to that surface point
+
+So, from a surface point, for every light:
+1. Get the projected angle of that light source at the surface point
+2. Determine the light intensity over solid angle (assuming no obscuring)
+3. Sample shadow rays from this distribution
+
+This can also be done one step up.
+From every surface point
+1. Determine the light intensity at the surface point for every light source in the scene (assuming no obscuring)
+2. Determine the total intensity from all light sources
+3. Determine a PDF for each light source by dividing it's intenstiy by the total
+4. Choose a light source according to PDF
+5. For every light
+  1. Get the projected angle of that light source at the surface point
+  2. Determine the light intensity over solid angle (assuming no obscuring)
+  3. Sample shadow rays from this distribution
+
+
+### Question
+- What happens if the no obscuring assumption is dropped?
+  - Don't we want to sample according to the real intensity of a light, rather than it's expected
+- Should we sample 1 shadow ray for any given light, before sampling M lights from the pdf again. OR should we sample N shadow rays for a light, before going back to M lights in the PDF. What are reasonable values for M, N
+
+# Depth of Field
+- Previous computer gfx rendering had been modeling pin-hole cameras
+- Potmesil simulated depth of field with a postprocessing technique
+  - This cannot be fully accurate
+  - Due to different parts of the lens having different visibility of the center
+
+- In real life, cameras and the human eye have a finite lens
+  - All points in a scene appear as a circle on the image plane
+- The circle a point makes on the lens is called the _circle of confusion_
+  - it's size depends on the distance to the point and the lens optics
+
+## TODO
+
+
+# Motion Blur
+- Previous attempts at motion blur separated visibility from motion blur calculation
+  - This is akin to sampling a still frame and then blurring the result
+
+- In the example of a spinning top, the shadow of the top should not be blurred
+  - even though the top's shading should be blurred
+- Correctly blurring shadows requires multiple shades per frame
+
+- The notion of an anlytic solution to motion-blur is abandoned
+- Only distributing the samples in time can solve for accurate motion blur
+
+# Other Implications of the Algorithm
+- Visible surface calculation is easy
+  1. Update the positions of the objects for that ray's time
+  2. Send a ray from the lens to the sample point
+  3. Find the object it intersects
+
+- Properly bounding moving objects is a nontrival problem
+
+- Volumes can be simulated by scaling with a $\tau$ over distance
+
+# Summary Algorithm
+- Intensity of a pixel is an analytic function over several nested integrals
+  - over time
+  - over the pixel region
+  - over the lens area
+  - reflection times illuminace over reflection hemisphere
+  - transmittance times illuminace over transmitted hemisphere
+  - The above is recursed
+- Even for all of this complexity, point-sampling is still adequate
+- If a function depends on $n$ parameters
+  - simply sample over the $n$ dimensions
+  - try to sample over the $n$ dimensions _well_
+
+# Conclusions
+- Solves a number of unsolved or partially solved problems
+- Depth of Field calculations
+- Blurry phenomena such as
+  - penumbra
+  - gloss
+  - translucency
+- Where all of that can be motion blurred
+
+
+<!-- Style -->
+
+<style> /* Custom Style */
+        .md div.imagecaption { text-align: center; margin-bottom: 1em; }
+</style>
+
+<!-- Markdeep: -->
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="../assets/markdeep.min.js"></script>
+<script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

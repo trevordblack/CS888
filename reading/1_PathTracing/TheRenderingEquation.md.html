@@ -1,0 +1,371 @@
+<meta charset="utf-8">
+
+**The Rendering Equation**
+
+# Abstract
+- A generalization of existing rendering algos
+- Hierarchical sampling is a new form of variance reduction
+
+# The rendering equation
+- All previous rendering techniques are just approximations of a single equation
+- All of these techniques were an attempt to model light scattering off of different types of surfaces (or volumes)
+- The Rendering equation is:
+
+    $$ I(x,x') = g(x,x') \left[ \epsilon(x,x') + 
+    	\int_S \rho(x,x',x'') I(x',x'')dx'' \right ]
+    $$
+
+- $I(x,x')$ is the intensity of light from point $x'$ to $x$
+- $g(x,x')$ is a "geometry" term
+  - It is the catchall for modelling the effects of the local geometry at $x$
+- $\epsilon(x,x')$ is "related" (what?) to the intensity of emmited light from $x'$ to $x$
+- $\rho(x,x',x'')$ is related to the intensity of light scattered from $x''$ to $x$ by scattering at a patch of surface at $x'$
+- I personally don't like any of the above notation
+
+- The intensity of light from one surface point to another is simply the sum of
+  - The emitted light
+  - the total intensity scattered toward the latter point from the former
+
+- All quantities in the equation are referred to as:
+  - _unoccluded multipoint transport_ quantities
+  - Computer Science and it's peerless ability to name things
+- The integral is taken over $S = \cup S_i$
+  - The union of all surfaces in the scene
+  - the points $x$, $x'$, and $x''$ range over all the surfaces of all objects in the scene
+  - This must also include a global background surface $S_0$
+    - typically used for ambient lighting
+  - This is a LOT of computation
+
+- Maxwell's equations for only approximated
+  1. Only model time averaged transport intensity (steady-state)
+    - No phase modelling (again, steady-state)
+    - Cannot accurately model diffraction
+  2. Assume that the medium between surfaces is
+    - homogeneous refractive index
+    - Does not scatter light
+  3. No Wavelength dependence
+  4. No polarization dependence
+
+- Assumption 1 is maintained for practically all renderers
+- Assumption 2 must be removed to allow for many media affects
+- Assumption 3 is all but gone in modern renderers
+- Assumption 4 is maintained for practically all renderers
+
+# Discussion of Transport Quantities
+
+## Unoccluded two point transport
+- $I(x,x')$ is the _unoccluded two point transport_
+  - or, the _transport intensity_
+- $I(x,x')$ is the energy of radiation per _unit time_ per _unit area of source_ per _unit area of target_
+
+  $$ dE = I(x,x') dt dx dx' $$
+
+- The units of $I$ are $\frac{joule}{m^4 sec}$
+
+## Geometry term
+- $g(x,x')$ is the _geometry term_
+- It encodes the occlusion of surface points by other surface points
+  - Specifically occlusion from $x'$ to $x$
+- Visibility between $x$ and $x'$
+  - Mutually not visible (occluded): $g(x,x') = 0$
+  - Mutulally visible: $g(x,x') = 1/r^2$ where $r = length(x - x')$
+
+## Emittance term
+- $\epsilon (x,x')$ is the _unoccluded two point transport emittance_
+- measures the energy emitted by a surface at $x'$ reaching point $x$
+- $\epsilon (x,x')$ is the energy per _unit time_ per _unit area of source_ per _unit area of target_
+
+  $$ dE = \frac{1}{r^2} \epsilon(x,x') dt dx dx' $$
+
+- the units of $\epsilon (x,x')$ are $\frac{joule}{m^2 sec}$
+
+## Scattering term
+- $\rho(x,x',x'')$ is the _unoccluded three point transport reflectance_
+- is the intensity of energy scattered by a surface at x' originating from x'', terminating at a surface element at x
+- This term would also encompase transmittance, but is removed for simplicity
+- This represents the totality of indirect light
+  - I don't know if an x''', x'''', etc. is necessary for complete info
+- $\rho(x,x',x'')$ represents a percentage, and so is unitless
+
+  $$ dE = \frac{1}{r^2} \rho(x,x',x'') I(x',x'') dt dx dx' dx'' $$
+
+## More conventional radiometric quantities
+- Ordinary radiometric instensity is defined as energy per _unit time_ per _unit of projected area of source_ per _solid angle_
+
+  $$ dE = i(\theta ',\phi ') d\omega d x'_p dt $$
+
+
+The terms of radiometric intensity can be related to the rendering equation by
+
+- $r = ||x - x'||$
+- $dx'_p = dx' \cos(\theta)$
+- $\cos(\theta) = \frac{1}{r}(n \cdot (x-x'))$
+- $\cos(\theta') = \frac{1}{r}(n' \cdot (x-x'))$
+- $\cos(\phi') = \frac{1}{r}(t' \cdot (x-x'))$
+- where $n$ is the normal at $x$
+- where $t$ is the tangent at $x$
+- where $\theta$ is the theta at $x$
+- where $\phi$ is the phi at $x$
+
+The solid angle subtended by surface element $dx$ is the fractional area of a sphere of radius $r$ taken up by the projected area $dx_p = dx \cos(\theta)$
+
+  $$ d\omega = \frac{dx_p}{r^2} = \frac{1}{r^2} \cos \theta dx $$
+
+Combining the two previous equations leads to:
+
+  $$ dE = i(\theta ',\phi ') \frac{1}{r^2} \cos \theta \cos \theta ' dt dx dx' $$
+
+## Relating old terms with new terms
+- The relationship between transport intensity and ordinary intensity is found by
+
+  $$ I(x,x') = i(\theta', \phi') \frac{1}{r'^2} \cos \theta \cos \theta' $$
+
+- Transport emittance and ordinary emittance:
+
+  $$ \epsilon(x,x') = \epsilon(\theta', \phi') \cos \theta \cos 
+  \theta ' $$
+
+- Transport reflectance and ordinary radiometric total bidirectional reflectance function $\rho(\theta', \phi', \psi', \sigma')$
+
+  $$ i(\theta ', \phi ') = \rho(\theta ', \phi ', \psi ', \sigma ') i(\psi ', \omega ') d\omega '' \cos \psi' $$
+
+- where $\theta '$ is the angle between $n'$ and $x' - x$
+- where $\phi '$ is the angle between $t'$ and $x' - x$
+- where $\psi '$ is the angle between $n'$ and $x'' - x'$
+- where $\sigma '$ is the angle between $t'$ and $x'' - x'$
+
+- Unoccluded three point transport reflectances and ordinary total bidirectional reflectance
+
+  $$ \rho (x,x',x'') = \rho(\theta ', \phi ', \psi ', \sigma ') \cos \theta \cos \theta '$$ 
+
+# Methods for approximate solution
+- A wide variety of previous rendering algorithms can be viewed as approximations of the rendering equation
+
+## Neumann series
+
+  $$ I = g \epsilon + g M I $$
+
+- $M$ is the linear operator given by the intgeral term in TRE
+- The above can be rearranged as
+
+  $$ (1 - g M)I = g \epsilon $$
+
+- $1$ is the identity operator
+- The equation can be inverted to
+
+  $$ I = (1- gM)^{-1} g \epsilon
+       = g \epsilon + gMg \epsilon + gMgMg \epsilon + g(Mg)^3 \epsilon ...
+  $$
+
+- In order for the above sum to converge
+  - The spectral rasius of M must be less than 1
+- The Neumann expansion gives a final intensity of radiation transfer between points $x$ and $x'$ as the sum of:
+  - A direct term
+  - A once scattered term
+  - A twice scattered term
+  - etc.
+
+## The Utah approximation
+
+  $$ I = g \epsilon + gM \epsilon_0 $$
+
+- The Utah approximation only computes the first bounce
+- $M$ operates directly on $\epsilon_0$
+  - This means that visiblity to emitters is ignored
+  - It ignored shadows
+- $\epsilon_0$ is used to denote that only point lights are supported
+- $M$ becomes a simple sum over light sources
+  - As opposed to an integration over $x''$
+
+- Later implementations would add shadows and extended light sources
+
+## The Ray Tracing approximation
+- Whitted proposed
+
+  $$ I = g\epsilon + gM_0 g\epsilon_0 + gM_0 gM_0 g\epsilon_0 + ... $$
+
+- $M_0$ is the scattering model which is the sum of
+  - Reflection $\delta$ function
+  - Refraction $\delta$ function
+  - diffuse $\cos$ function
+- Note that Whitted has $g\epsilon_0$, which means that:
+  - he has shadows, but
+  - All lights are point radiators
+- Whitted's ambient term corresponds to the initial $\epsilon$ term
+
+## The distributed ray tracing approximation
+- The same as Whitted Proposal, with the following mutations
+  1. Refraction is now a cosine term around the $\delta$
+  2. Reflection is now a cosine term around the $\delta$
+- The refraction and reflection parts of the $M$ term are approximated with Monte Carlo techniques
+- The ambient term is unchanged
+- The diffuse term is unchanged
+
+## The radiosity approximation
+- New rendering technique for perfectly diffuse surfaces
+
+  $$ \rho(\theta ', \phi ', \psi ', \sigma ') = \rho_0 $$
+
+- The _radiosity_ $B(x')$ of a surface element $dx'$ is the energy flux over the visible hemisphere
+- Energy prt _unit time_ per _unit (unprojected) area_
+- Measured in watts per meter squared
+
+  $$ dB(x') = dx' \int_{hemi} i(\theta ',\phi ') \cos \theta 'd\omega $$
+  $$ = dx' \int_{hemi} \frac{I(x, x') r^2}{\cos \theta} d\omega $$
+  $$ = dx' \int_{S} I(x, x') dx $$
+
+- For the hemispherical quantities we can integrate over all the surfaces in the scen
+
+  $$ dB(x') = dx' \int \left[ g(x,x') \epsilon(x,x') + 
+      g(x,x') \int \rho(x,x',x'') I(x',x'')dx'' \right] dx $$
+
+  $$ dB(x') = dB_e(x') + dB_r(x') $$
+
+
+Solving for the Emittance term $dB_e(x')$
+
+- If there is an occlusion between $x$ and $x'$, $g(x,x') = 0$, and
+
+  $$ dB_e(x') = 0 $$
+
+- If there is no occlusion between $x$ and $x'$, $g(x,x') = \frac{1}{r^2}$
+
+  $$ dB_e(x') = dx' \int \frac{\epsilon (x,x')}{r^2} dx $$
+  $$ = dx' \int \frac{\epsilon (\theta ', \phi ') \cos \theta ' \cos \theta}{r^2} dx $$
+  $$ = dx' \int \epsilon (\theta ', \phi ') \cos \theta ' d \omega $$
+  $$ = dx' \pi \epsilon_0 $$
+
+- where $\epsilon_0$ is the hemispherical emittance of the surface element $dx'$
+
+Solving for the reflectance term
+
+- If there is an occlusion between $x$ and $x'$, $g(x,x') = 0$, and
+
+  $$ dB_r(x') = 0 $$
+
+- If there is no occlusion between $x$ and $x'$, $g(x,x') = \frac{1}{r^2}$
+
+  $$ dB_r(x') = dx' \int \frac{1}{r^2} \int \rho (x,x',x'') I(x',x'') dx''dx $$
+  $$ = dx' \int \frac{1}{r^2} \rho(\theta', \phi', \psi', \sigma') \cos \theta \cos \theta 'dx \int  I(x',x'') dx'' $$
+  $$ = dx' \rho_0 \int \cos \theta d\omega \int I(x',x'') dx'' $$
+  $$ = dx' \rho_0 \pi H(x') $$
+
+- $H(x')$ is the hemispherical incident energy per unit time and unit area
+
+In total,
+
+  $$ dB(x') = \pi [ \epsilon_0 + \rho_0 H(x') ] dx' $$
+
+# Markov chains for solving integral equations
+- Markov chains are a numerical method for solving integral equations
+
+## Finite dimensional version
+
+- For an equation
+
+ $$ x = a + Mx $$
+
+- where $x$ and $a$ are $n$-dimensional vectors
+- $M$ is an $n \times n$ matrix
+- and $x$ is our unknown
+
+- With a Neumann expansion, for a matrix $M$
+  - with eigenvalues within the unit circle:
+
+
+  $$ x = a + \sum_{k=1}^{\infty} M^k a $$
+
+- $x$ is found by averaging over paths through matrix multiples
+
+## infinite dimensional version
+
+# Hierarchical sampling
+- The field of variance reduction extends beyond Ray Tracing
+  - Any variance reduction technique will have utility in any Monte Carlo
+- All techniques are inspired by stratified sampling
+
+## Sequential uniform sampling
+- Samples of an integral estimate are repeatedly collected until the variance falls below some threshold
+- This can be used to prioritize rays in the direction of difficult portions
+- This strategy is not compatible with stratifying the samples
+
+- The jitter sampling method
+  1. Splits a pixel into n cells (strata)
+  2. Gives each cell 1 random sample within that cell
+- Uniform subdivision is impossible w/o _a priori_ knowledge of sample count
+
+- _Sequential uniform sampling_ enables uniform subdivision w/o _a priori_ knowledge
+- This is accomplished according to the folowing:
+  1. We have a tree of sample points
+  2. Traverse the tree until a leaf cell is found
+  3. The cell is split in half
+  4. The existing sample is placed in it's half of the cell
+  5. Choose a new sample from the empty half
+
+- In order to perform a uniform search of the space
+  - It is necessary to split cells (nodes) breadth first in random order
+- To choose a node, follow this algo:
+  1. If either is a leaf, choose that leaf
+  2. Choose left  if level(left) < level(right) and left is balanced
+  3. Choose right if level(right) < level(left) and right is balanced
+  4. Choose randomly otherwise
+  
+## The multidimensional case
+- The above is extended to higher dimensions than 1D using a k-d tree
+- Succesively subdivide the n-space into two halves going through succesive axes
+  - e.g. x, y, z, w, x, y, z, w, ...
+
+## Hierarchical integration
+- Take into account the volume (area) of a cell
+- Each time a leaf cell is split
+  - That cell's contribution to the sum is halved
+- Converges in $O(n^-1)$ as opposed to $O(n^-2)$ for monte carlo
+
+## Adaptive hierarchial integration
+- Focus samples on "interesting" parts of the tree
+  - demur samples where the integrand is nearly constant
+- Examples
+  - randomly choose a subnode
+  - uniform sampling threshold
+  - variance
+  - time history of the integral
+- This is hard, and was not completed
+
+## Nonuniform sampling: Importance sampling analogs
+- Is importance sampling
+
+# Application to the rendering equation
+- Sequential uniform sampling is used for depth of field
+- They don't flatten the tree, so the median of a pixel can be found through Binary search
+
+- The difference between whitted and this is
+  - Whitted has a tree of rays from surfaces, this has only one path
+
+- The first bounce and the first ray are **the most imortant** when
+  - solving for variance
+  - determining path contribution
+- Second rays contribute much less to variance
+- Whitted RT blows most of it's compute on successive bounces
+
+- Having fewer bounces per ray is, in general, a more optimized approach
+
+- **Holy Shit** 
+  - "However, for this new fast form of ray tracing--called _path tracing_..."
+  - I think this is where the term came from
+
+# Results
+
+
+
+
+<!-- Style -->
+
+<style> /* Custom Style */
+        .md div.imagecaption { text-align: center; margin-bottom: 1em; }
+</style>
+
+<!-- Markdeep: -->
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="../assets/markdeep.min.js"></script>
+<script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

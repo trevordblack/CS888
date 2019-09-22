@@ -1,0 +1,44 @@
+<meta charset="utf-8">
+
+**A Radiosity Method For Non-Diffuse Environments**
+
+# Abstract
+- A general radiosity method is introduced
+  - It solves for reflections of light among diffuse, non-diffuse, and emissive surfaces
+
+# Introduction
+- RT was the first method introduced to include shadowing and reflections from neighboring surfaces
+- Given that a limited numbers of rays are traced from the eye
+  - Perfect modeling of GI is impossible
+- "Only radiosity methods can accurately model GI"
+
+- The radiosity method is based on the Law of Conservation of Energy
+- Is a complex global solution to solve for the intensity of light leaving all surfaces
+  - Solves a set of linear eqs describing transfer of diffuse light between surfaces
+  - Can be completed independently of wavelength
+- Advantages
+  - Increased accuracy of GI
+  - Viewing independent
+
+ - Problem:
+   - Previously all radiosity methods assumed all surfaces to be perfect Lambertian
+   - Specular surfaces were not allowed
+
+ - This paper removes the restriction on surfaces by
+   - generalizing the radiosity formulation
+
+ 
+
+
+
+<!-- Style -->
+
+<style> /* Custom Style */
+        .md div.imagecaption { text-align: center; margin-bottom: 1em; }
+</style>
+
+<!-- Markdeep: -->
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="../assets/markdeep.min.js"></script>
+<script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

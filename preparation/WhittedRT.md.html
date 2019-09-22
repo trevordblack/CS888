@@ -1,0 +1,240 @@
+<meta charset="utf-8">
+
+An Improved Illumination Model for Shaded Display
+Turner Whitted
+
+# Abstract
+- Use of term _Global Illumination_
+  - I think GI here means both _Direct Illumination_ and _Indirect Illumination_
+- Outlines a _tree_ of rays from the viewer into the scene
+- Anti-Aliasing is included
+- Polygonal and curves surfaces are supported
+
+# Introduction
+
+- The illumination model exists to determine quantity of light reflected to the viewer from a point on a surface. This is a function of:
+  1. Light source direction 
+  2. Light source strength 
+  3. Viewer position
+  4. Surface orientation
+  5. Surface properties
+- Shading calculations can be performed on three scales
+  1. microscopic
+  2. local
+  3. global
+- Previous shaders used aggregate of local data, i.e. light source and surface info
+- The Whitted model uses global info to calculate intensities
+- The shading algorithm is then rewritten for the change
+
+# Conventional Models
+Conventional _for the time_
+
+## Simplest Model
+- Based on Lambert's cosine law:
+
+    $$ I = k_d \sum_{j=1}^{j=l_s}
+        (\overrightarrow{N} \cdot \overrightarrow{L_{j}}) 
+    $$
+    
+## Phong's shading model
+- Combination of an ambient, diffuse, and specular term
+- Assumes that every light source is infinitely distant from the objects in the scene
+- Breaks down for emmissive objects in the scne
+- Breaks down for light reflecting from object to object
+- Enables realistic-enough diffuse reflection, but very poor specular reflections
+
+    $$ I = I_a + k_d \sum_{j=1}^{j=l_s}
+        (\overrightarrow{N} \cdot \overrightarrow{L_{j}}) 
+        + k_s \sum_{j=1}^{j=l_s}
+        (\overrightarrow{N} \cdot \overrightarrow{L_{j}})^n
+    $$
+
+- $I$ = reflected intensity
+- $I_a$ = reflection due to ambient light
+- $k_d$ = diffuse reflection coefficient
+- $\overrightarrow{N}$ = unit surface normal
+- $\overrightarrow{L_j}$ = the vector in the direction of the jth light source
+- $k_s$ = the specular reflection coefficient
+- $\overrightarrow{H_j}$ = the half-way ector between the viewer and the jth light source
+- $n$ = an exponent that depends on the glossiness of the surface
+
+## Blinn and Newell
+- Partially solves Phong's specular reflection problem
+- Models an object's environment (per object!)
+- Maps GI per object onto a sphere of infinite radius
+- Greatly enhanced realism
+- HUGELY computationally expensive
+
+## Shadow Modeling
+- A point on a surface is _in shadow_ if it
+  - is visible to the viewer
+  - but **not** visible to the light source
+- Prior methods invoked the visibility algo twice per surface point
+  1. Visibility to viewer
+  2. Visibility to the light source
+
+## Transmission of light through transparent objects
+- Requires rendering from back to front
+- Does not model refraction
+
+# Improved Model
+
+## Math Model
+-  Including a transmissive term:
+
+    $$ I = I_a + k_d \sum_{j=1}^{j=l_s}
+        (\overrightarrow{N} \cdot \overrightarrow{L_{j}}) 
+        + k_s S + k_l T
+    $$
+
+- From a viewpoint $\overrightarrow{V}$ $S$ and $T$ represent
+  - $S$ represents the specular reflection from radiance at $reflect(V,N)$
+  - $T$ represents the transmissive radiance from $refract(P,\eta_i, \eta_o)$
+- From this equation, $k_s$ and $k_l$ are held constant, but, in reality:
+  - $k_s(\theta)$ and $k_l(\theta)$
+  - Where both are defined by the Fresnel equations
+  - They can be approximated by the Schlick Fresnel approximation
+
+- Reflection is defined
+
+    $$ \overrightarrow{V'} = \frac{\overrightarrow{V}}
+        {| \overrightarrow{V} \cdot \overrightarrow{N} |}
+    $$
+
+    $$ \overrightarrow{R} = \overrightarrow{V'} + 2 \overrightarrow{N} $$
+
+- Refraction is defined
+    $$ k_f = ({k_n}^2|\overrightarrow{V'}|^2 - 
+        |\overrightarrow{V'} + \overrightarrow{N}|^2)^{-\frac{1}{2}}
+    $$
+
+    $$ \overrightarrow{P} = k_f (\overrightarrow{N} + \overrightarrow{V'}) 
+         - \overrightarrow{N} 
+    $$
+
+- $k_n = \eta_o / \eta_i$
+- where $k_f$ is a complex number, it is assumed to be zero
+  - This would follow from total internal reflection
+
+## Small Implementation Details
+- This paper does _not_ provide a solution to the problem of microfacets
+  - It doesn't specify how exactly rough specular reflection is calculated
+  - Rather, it punts: For rough objects, it reverts to the Phong shading model
+- Shadow casting only reduces the diffuse term
+- The intensity of a path is _Wild_. For every path trace:
+  1. A Tree of transmission and reflection is created
+  2. The Math model above is applied to solve for intensity of all leaves of the tree
+  3. The intensity of all leaves is attenuated by a linear function of a leaf's distance to it's parent
+    1. _WHAT_.
+    2. Know-a-days We don't attenuate the intensity of successive bounces, rather, we just take it's product.
+    3. Furthermore, if we were to attenuate, a square-law attenuation is common-sense
+    4. But, the Monte Carlo solution is _already_ attenuating according to square-law.
+    5. The linear function is a fudge to deal with non-planar surfaces or non-point lighting
+  4. The algorithm recurses until the true intensity is calculated for the root node (pixel)
+
+# Visible Surface Processor
+- The obvious solution is to trace light rays from the lights until they intersect the viewer
+  - This is incredibly wasteful
+
+## Smarter Visibility
+- The smarter solution is to trace from the viewer, toward the objects in the scene
+- Visibility calculations do not end with the closesthit intersection of ray and object
+- For every intersection, additional rays are created:
+  - "more rays" in the $R$ direction (reflection)
+  - "more rays" in the $P$ direction (transmission)
+  - "more rays" in the $L_i$ direction (toward each light)
+  - It isn't clear if multiple rays are sent for each of $R$, $P$, or $L_i$ directions
+- This is repeated (creating a tree) until no new rays intersects any object
+  - Fuck that is expensive
+
+## Abandoned Traditional Notions
+- The "measure" of visual complexity is larger than convention
+  - Objects may be visible through reflections in other objects
+- The following can cause inaccuracies
+  - Culling of objects behind other objects
+  - Clipping
+  - Backface culling
+
+## Bounding Volume
+- The description for an object includes a bounding volume
+- if the ray does not intersect the volume, the object can be safely eliminated
+- Spheres are used as the bounding volume for _all_ objects
+
+- Spheres are used as test objects because bounding volume == object volume
+- Objects that are not spheres require an additional process to determine intersection
+- Polygonal surfaces:
+  1. Finds point on surface
+  2. Checks for interior of surface
+- Bicubic patches. This sceme is simple, it is _not_ efficient:
+  1. Bounding spheres are generated for each patch
+  2. If one of the bounding spheres is pierced
+  3. The patch is subdivided using Catmull-Clark
+  4. Subdivision is repeated until either
+    - No bounding spheres are intersected
+    - The intersected bounding sphere is smaller than a predetermined minimum
+
+## Catmull-Clark (from Wikipedia)
+The algorithm is defined as:
+1. For each face, add a _face point_
+  - Set each face point to the average of all points for the face
+2. For each edge, add an _edge point_
+  - Set each edge point to the average of the 2 endpoints, and 2 adjacent facepoints
+3. For each face point, add an edge to each edge point for the face
+4. For each original point $P$
+  1. Take the average $F$ of all $n$ face points touching $P$
+  2. Take the average $R$ of all $n$ edge midpoints for (original) edges touching $P$
+    - the edge midpoint is the average of it's two endpoints
+  3. Move each original point to new point
+
+    $$ \frac{F + 2R + (n-3)P}{n} $$
+5. For all new vertex points, connect the edge points of all edges originally incident to that vertex
+6. Define new faces enclosed as edges
+
+## Anti-aliasing
+- Naive anti-aliasing is to low pass filter the entire image at output
+- Aliasing is most common in the following cases:
+  - Regions of abrubt change in luminance, such as silhouetting of a surface
+  - Objects too small to be consistently sampled
+  - Sampled function (e.g. texture) is mapped onto a surface
+- The visible surface algorithm performs LPF only in these regions
+
+## Pixel Intensity Solving
+- Also _WILD_
+1. Every corner of every pixel is treated as a sample point
+2. Intensities for all sample points is deduced
+3. The radiance of the four points are compared
+  - If nearly equal values and no small object lies in the center region, the average is assumed good enough, and finishes.
+  - If one of the above does not hold, then...
+4. The algorithm subdivides the sample square and starts over again
+5. Repeat recursively until 
+  - the computer "runs out of resolution"
+  - Adequate detail within this sample square is achieved
+6. The contribution of every region is weighted by it's area
+7. All contributions are summed to produce the radiance of the pixel
+
+- In the limit this is an area-sampling technique
+- After this paper, they investigated the volumes contained by each set of corner rays
+  - A containment test is applied for each volume
+
+## Small Objects
+- The bounding sphere of a small object is increased until it is guaranteed to be intersected by at least one ray
+- If the ray passes within the minimum radius of a small object, but does _not_ intersect:
+  1. All four sampling squares that share the ray are subdivided
+  2. This continues until the object is intersected
+- This may not work for reflection from curved surfaces
+- This can be thought of analogously to ray pairs
+
+
+
+
+<!-- Style -->
+
+<style> /* Custom Style */
+        .md div.imagecaption { text-align: center; margin-bottom: 1em; }
+</style>
+
+<!-- Markdeep: -->
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="../assets/markdeep.min.js"></script>
+<script src="https://casual-effects.com/markdeep/latest/markdeep.min.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>
